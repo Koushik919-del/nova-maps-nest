@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Maps</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #111315;
+            color: #c9d1d9;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 320px;
+            min-width: 320px;
+            height: 100vh;
+            background: #161b22;
+            border-right: 1px solid #30363d;
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 1001;
+        }
+        #main-content {
+            flex: 1;
+            position: relative;
+            height: 100vh;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+            background: #0d1117;
+        }
+
+        #sidebar::-webkit-scrollbar { width: 6px; }
+        #sidebar::-webkit-scrollbar-track { background: #0d1117; }
+        #sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+        .main-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #f0f6fc;
+            margin-bottom: 0px;
+        }
+        .caption {
+            font-size: 0.8rem;
+            color: #8b949e;
+            margin-top: 4px;
+            margin-bottom: 20px;
+        }
+        hr {
+            border: 0;
+            border-top: 1px solid #30363d;
+            margin: 20px 0;
+        }
+
+        .tab-radio-group { display: flex; gap: 4px; margin-bottom: 20px; background: #0d1117; padding: 4px; border-radius: 6px; border: 1px solid #30363d; }
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #8b949e;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            text-align: center;
+            transition: background 0.2s;
+        }
+        .tab-btn.active {
+            background: #21262d;
+            color: #f0f6fc;
+        }
+
+        .sidebar-box {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .subheader {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #f0f6fc;
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #c9d1d9;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+            font-size: 0.9rem;
+        }
+        input[type="text"]:focus { border-color: #58a6ff; outline: none; }
+        label { font-size: 0.85rem; color: #8b949e; display: block; margin-bottom: 6px; }
+        
+        .cols-2 { display: flex; gap: 10px; }
+        .cols-2 > * { flex: 1; }
+
+        .btn {
+            background: #238636;
+            color: #ffffff !important;
+            border: 1px solid #2ea043;
+            border-radius: 6px;
+            font-weight: 600;
+            padding: 8px 12px;
+            width: 100%;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        .btn:hover {
+            background: #2ea043;
+        }
+        .btn-secondary {
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #c9d1d9 !important;
+        }
+        .btn-secondary:hover {
+            background: #30363d;
+        }
+
+        .route-card, .traffic-card {
+            border-radius: 6px;
+            padding: 12px;
+            margin: 10px 0;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+        .route-card { background: #161b22; border-left: 4px solid #58a6ff; }
+        .traffic-green  { background: #0d1117; border-left: 4px solid #34a853; }
+        .traffic-orange { background: #0d1117; border-left: 4px solid #fb8c00; }
+        .traffic-red    { background: #0d1117; border-left: 4px solid #ea4335; }
+
+        .success-msg { color: #3fb950; font-size: 0.85rem; margin-top: 10px; }
+        .error-msg { color: #f85149; font-size: 0.85rem; margin-top: 10px; }
+        .warn-msg { color: #d29922; font-size: 0.85rem; margin-top: 10px; }
+
+        #click-popup {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 12px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="main-title">🗺️ Nova Maps</div>
+        <div class="caption">Powered by OSM · TomTom · ORS · NOVA · MrBunnyAI</div>
+
+        <div class="tab-radio-group">
+            <div class="tab-btn active" data-tab="Search">🔍Search</div>
+            <div class="tab-btn" data-tab="Directions">🧭Directions</div>
+            <div class="tab-btn" data-tab="Traffic">🚦Traffic</div>
+            <div class="tab-btn" data-tab="Settings">⚙️ Settings</div>
+        </div>
+
+        <div id="tab-Search" class="tab-content">
+            <div class="sidebar-box">
+                <h3 class="subheader">🔍 Search Location</h3>
+                <input type="text" id="search-query" placeholder="Guntur, India">
+                <div class="cols-2">
+                    <button class="btn" onclick="handleSearch()">Search</button>
+                    <button class="btn btn-secondary" onclick="handleClear()">Clear</button>
+                </div>
+                <div id="search-status"></div>
+            </div>
+
+            <div class="sidebar-box">
+                <h3 class="subheader">🟣👁️ Enderpearl Chamber</h3>
+                <div class="caption">Teleport using the Enderman's powers:</div>
+                <select id="landmark-select" onchange="handleLandmarkChange(this.value)">
+                    <option value="">Select custom coordinates...</option>
+                    <option value="34.0012,-118.8066,Stark Mansion Site,cloud"> ⎊ Tony Stark's Malibu Mansion</option>
+                    <option value="29.9792,31.1342,Pyramids of Giza,sun"> 🛕 The Great Pyramids of Giza</option>
+                    <option value="35.7101,139.8107,Tokyo Skytree,bolt"> ⛩️ Tokyo Skytree</option>
+                    <option value="28.5729,-80.6490,LC-39 Launch Complex,rocket"> 🚀 NASA Kennedy Space Center</option>
+                    <option value="27.1751,78.0421,Taj Mahal,cloud"> 🕌 Taj Mahal</option> 
+                    <option value="40.2553,116.3352,Great Wall of China,shield"> 🏯 Great Wall of China</option>
+                    <option value="48.8584,2.2945,Eiffel Tower,flag"> 🗼 Eiffel Tower</option>
+                    <option value="51.5007,-0.1246,Big Ben,clock"> 🕰️ Big Ben</option>
+                    <option value="40.6892,-74.0445,Statue of Liberty,flag"> 🗽 Statue of Liberty</option>
+                    <option value="27.9881,86.9250,Mount Everest,mountain"> 🏔️ Mount Everest</option>
+                    <option value="30.3285,35.4444,Petra Ruins,shield"> 🏺 Petra Ruins</option>
+                    <option value="41.8902,12.4922,Colosseum,shield"> 🏟️ Colosseum</option>
+                    <option value="43.7230,10.3966,Leaning Tower of Pisa,shield"> 🏛️ Leaning Tower of Pisa</option>
+                    <option value="20.6843,-88.5678,Chichen Itza,shield"> 🌽 Chichen Itza</option>
+                    <option value="-22.95192, -43.21046,Christ the Redeemer,flag"> ♱ Christ the Redeemer</option>  -22.95192, -43.21046
+                </select>
+            </div>
+
+            <div class="sidebar-box">
+                <div class="caption">Or use your current location:</div>
+                <button class="btn btn-secondary" onclick="handleGeolocation()"><i class="fas fa-location-arrow"></i> &nbsp;Locate Me</button>
+                <div id="geo-status"></div>
+            </div>
+        </div>
+
+        <div id="tab-Directions" class="tab-content" style="display: none;">
+            <div class="sidebar-box">
+                <h3 class="subheader">🧭 Get Directions</h3>
+                <label>From</label>
+                <input type="text" id="origin-input" placeholder="Start address">
+                <label>To</label>
+                <input type="text" id="dest-input" placeholder="Destination address">
+                <label>Travel mode</label>
+                <select id="mode-select">
+                    <option value="driving-car">🚗 Drive</option>
+                    <option value="cycling-regular">🚲 Bike</option>
+                    <option value="foot-walking">🚶 Walk</option>
+                </select>
+                <button class="btn" onclick="handleDirections()">Get Directions</button>
+                <div id="dir-status"></div>
+            </div>
+            <div id="dir-results"></div>
+        </div>
+
+        <div id="tab-Traffic" class="tab-content" style="display: none;">
+            <div class="sidebar-box">
+                <h3 class="subheader">🚦 Traffic Info</h3>
+                <input type="text" id="traffic-loc" placeholder="Address or place">
+                <div class="cols-2" style="margin-bottom: 14px; display: flex; align-items: center;">
+                    <label style="margin: 0; display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="show-layer" checked> Traffic layer</label>
+                    <label style="margin: 0; display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="show-incidents" checked> Incidents</label>
+                </div>
+                <button class="btn" onclick="handleTraffic()">Show Traffic 🚦</button>
+                <div id="traffic-status"></div>
+            </div>
+            <div id="traffic-results"></div>
+        </div>
+
+        <div id="tab-Settings" class="tab-content" style="display: none;">
+            <div class="sidebar-box">
+                <h3 class="subheader">⚙️ Map Settings</h3>
+                <select id="base-layer-select" onchange="changeBaseLayer(this.value)">
+                    <option value="OpenStreetMap">OpenStreetMap</option>
+                    <option value="CartoDB Dark">CartoDB Dark</option>
+                    <option value="CartoDB Light" selected>CartoDB Light</option>
+                    <option value="Stadia Terrain">Stadia Terrain</option>
+                    <option value="Satellite (Esri)">Satellite (Esri)</option>
+                </select>
+                <div class="caption">Switch between map styles instantly.</div>
+            </div>
+        </div>
+
+        <hr>
+        <details>
+            <summary style="cursor: pointer; color: #8b949e; font-size: 0.85rem; outline: none;">🔑 API Key Status</summary>
+            <div id="api-status" style="margin-top: 10px; font-size: 0.85rem; color: #8b949e;"></div>
+        </details>
+    </div>
+
+    <div id="main-content">
+        <div id="map"></div>
+        
+        <div id="click-popup">
+            <div id="click-coords" style="margin-bottom: 10px; font-weight: 600; color: #f0f6fc;"></div>
+            <div class="cols-2" style="gap: 8px; display: flex; flex-wrap: wrap;">
+                <button class="btn btn-secondary" style="padding: 6px; font-size: 0.8rem; flex: 1 1 45%;" onclick="setOriginFromClick()">Set Origin</button>
+                <button class="btn btn-secondary" style="padding: 6px; font-size: 0.8rem; flex: 1 1 45%;" onclick="setDestinationFromClick()">Set Destination</button>
+                <button class="btn btn-secondary" style="padding: 6px; font-size: 0.8rem; flex: 1 1 45%;" onclick="trafficFromClick()">Traffic here</button>
+                <button class="btn btn-secondary" style="padding: 6px; font-size: 0.8rem; flex: 1 1 45%;" onclick="dropPinFromClick()">Drop Pin</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TOMTOM_API_KEY = "3ESpRk9mAP6zLyMJCRhgDkLzBmJmQzUP";
+        const ORS_API_KEY = "5b3ce3597851110001cf62483814d5291b424b728563a581f68e72e6";
+        const STADIA_API_KEY = "";
+        const OPENROUTER_API_KEY = "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";
+
+        document.getElementById('api-status').innerHTML = `
+            <b>TomTom:</b> ${TOMTOM_API_KEY !== "YOUR_TOMTOM_API_KEY" ? '✅ Connected' : '❌ Not set'}<br>
+            <b>OpenRouteService:</b> ${ORS_API_KEY !== "YOUR_ORS_API_KEY" ? '✅ Connected' : '❌ Not set'}<br>
+            <b>OpenRouter (MrBunny):</b> ${OPENROUTER_API_KEY !== "YOUR_OPENROUTER_API_KEY" ? '✅ Connected' : '❌ Not set'}
+        `;
+
+        const map = L.map('map').setView([16.3067, 80.4365], 12);
+        let currentBaseLayer = null;
+        let trafficTileLayer = null;
+        let markersLayer = L.layerGroup().addTo(map);
+        let routeLayer = L.layerGroup().addTo(map);
+        let incidentsLayer = L.layerGroup().addTo(map);
+        let accuracyCircle = null;
+
+        const tileOptions = {
+            "OpenStreetMap": { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "© OpenStreetMap contributors" },
+            "CartoDB Dark": { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap © CARTO" },
+            "CartoDB Light": { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap © CARTO" },
+            "Stadia Terrain": { 
+                url: STADIA_API_KEY ? `https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}` : "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+                attr: STADIA_API_KEY ? "© Stadia Maps © Stamen Design © OpenStreetMap" : "© OpenTopoMap (CC-BY-SA) © OpenStreetMap contributors"
+            },
+            "Satellite (Esri)": { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "© Esri © DigitalGlobe © GeoEye" }
+        };
+
+        function changeBaseLayer(styleName = "CartoDB Light") {
+            if (currentBaseLayer) map.removeLayer(currentBaseLayer);
+            const opt = tileOptions[styleName];
+            currentBaseLayer = L.tileLayer(opt.url, { attribution: opt.attr }).addTo(map);
+        }
+        changeBaseLayer("CartoDB Light");
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+                btn.classList.add('active');
+                document.getElementById(`tab-${btn.dataset.tab}`).style.display = 'block';
+            });
+        });
+
+        async function geocode(address) {
+            try {
+                let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
+                if (!res.ok) throw new Error("Rate limited");
+                let data = await res.json();
+                if (data && data.length > 0) {
+                    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), name: data[0].display_name };
+                }
+                return null;
+            } catch (e) {
+                document.getElementById('search-status').innerHTML = `<div class="warn-msg">Primary geocoder failed. Trying fallback...</div>`;
+                try {
+                    let res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}`);
+                    let data = await res.json();
+                    if (data.features && data.features.length > 0) {
+                        let f = data.features[0];
+                        return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], name: f.properties.name || address };
+                    }
+                    return null;
+                } catch (e2) {
+                    return null;
+                }
+            }
+        }
+
+        function updateMap(center, zoom) { map.setView(center, zoom); }
+
+        function clearMap() {
+            markersLayer.clearLayers();
+            routeLayer.clearLayers();
+            incidentsLayer.clearLayers();
+            if (accuracyCircle) map.removeLayer(accuracyCircle);
+        }
+
+        function addMarker(lat, lon, label, popupHtml, color = '#58a6ff', icon = 'map-marker') {
+            L.marker([lat, lon], {
+                icon: L.divIcon({
+                    html: `<i class="fas fa-${icon}" style="color: ${color}; font-size: 24px; text-shadow: 0 0 4px rgba(0,0,0,0.8);"></i>`,
+                    className: 'custom-fa-icon',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 24]
+                })
+            }).addTo(markersLayer).bindPopup(popupHtml).bindTooltip(label);
+        }
+
+        async function handleSearch() {
+            const q = document.getElementById('search-query').value;
+            if (!q) return;
+            document.getElementById('search-status').innerHTML = `<div class="caption">Searching...</div>`;
+            const result = await geocode(q);
+            if (result) {
+                clearMap();
+                updateMap([result.lat, result.lon], 15);
+                addMarker(result.lat, result.lon, result.name.substring(0, 60), `<b>${result.name}</b><br>📍 ${result.lat.toFixed(5)}, ${result.lon.toFixed(5)}`, '#58a6ff', 'map-marker');
+                document.getElementById('search-status').innerHTML = `<div class="success-msg">Found: ${result.name.substring(0, 80)}</div>`;
+            } else {
+                document.getElementById('search-status').innerHTML = `<div class="error-msg">Location not found. Try a more specific address.</div>`;
+            }
+        }
+
+        function handleClear() {
+            clearMap();
+            document.getElementById('search-query').value = '';
+            document.getElementById('search-status').innerHTML = '';
+        }
+
+        function handleLandmarkChange(val) {
+            if (!val) return;
+            const [lat, lon, label, icon] = val.split(',');
+            clearMap();
+            updateMap([parseFloat(lat), parseFloat(lon)], 16);
+            addMarker(parseFloat(lat), parseFloat(lon), label, `<b>✨ Teleported to: ${label}</b>`, '#bc8cff', icon);
+        }
+
+        function handleGeolocation() {
+            document.getElementById('geo-status').innerHTML = `<div class="caption">Locating...</div>`;
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    const acc = pos.coords.accuracy;
+                    
+                    clearMap();
+                    updateMap([lat, lon], 15);
+                    addMarker(lat, lon, "My Location", `<b>📍 You are here</b><br>${lat.toFixed(5)}, ${lon.toFixed(5)}<br>Accuracy: ±${acc.toFixed(0)} m`, '#58a6ff', 'user');
+                    
+                    if (acc) {
+                        accuracyCircle = L.circle([lat, lon], {
+                            radius: acc, color: "#1f6feb", fillColor: "#1f6feb", fillOpacity: 0.12, weight: 1
+                        }).addTo(map);
+                    }
+                    document.getElementById('geo-status').innerHTML = `<div class="success-msg">Located you at ${lat.toFixed(5)}, ${lon.toFixed(5)} (±${acc.toFixed(0)} m)</div>`;
+                    if (acc > 200) {
+                        document.getElementById('geo-status').innerHTML += `<div class="warn-msg">⚠️ Low accuracy, I don't have a Sniper Scope. Maybe Try Again?</div>`;
+                    }
+                }, err => {
+                    document.getElementById('geo-status').innerHTML = `<div class="error-msg">Geolocation error: ${err.message}</div>`;
+                });
+            } else {
+                document.getElementById('geo-status').innerHTML = `<div class="error-msg">Geolocation not supported.</div>`;
+            }
+        }
+
+        async function handleDirections() {
+            const originInput = document.getElementById('origin-input').value;
+            const destInput = document.getElementById('dest-input').value;
+            const mode = document.getElementById('mode-select').value;
+
+            if (!originInput || !destInput) {
+                document.getElementById('dir-status').innerHTML = `<div class="warn-msg">Please enter both the start and the destination.</div>`;
+                return;
+            }
+            document.getElementById('dir-status').innerHTML = `<div class="caption">Calculating route...</div>`;
+            document.getElementById('dir-results').innerHTML = '';
+
+            const orig = await geocode(originInput);
+            const dest = await geocode(destInput);
+
+            if (!orig || !dest) {
+                document.getElementById('dir-status').innerHTML = `<div class="error-msg">Could not geocode one or both addresses. (That is nerd speak, it means you need to be more specific.)</div>`;
+                return;
+            }
+
+            const url = `https://api.openrouteservice.org/v2/directions/${mode}/geojson`;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ coordinates: [[orig.lon, orig.lat], [dest.lon, dest.lat]] })
+                });
+                const data = await res.json();
+                const feature = data.features[0];
+                const coords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+                const summary = feature.properties.summary;
+                const distKm = (summary.distance / 1000).toFixed(2);
+                const durMin = (summary.duration / 60).toFixed(1);
+
+                clearMap();
+                routeLayer.addLayer(L.polyline(coords, { color: "#388bfd", weight: 5, opacity: 0.85 }));
+                
+                addMarker(orig.lat, orig.lon, "Start", `<b>🟢 Start</b><br>${orig.name.substring(0, 80)}`, '#3fb950', 'play');
+                addMarker(dest.lat, dest.lon, "End", `<b>🔴 End</b><br>${dest.name.substring(0, 80)}`, '#f85149', 'flag');
+
+                let midLat = (orig.lat + dest.lat) / 2;
+                let midLon = (orig.lon + dest.lon) / 2;
+                updateMap([midLat, midLon], 12);
+
+                const jetpackTime = (distKm / 120 * 60).toFixed(1);
+                const hyperloopTime = (distKm / 1000 * 60).toFixed(1);
+
+                document.getElementById('dir-status').innerHTML = '';
+                document.getElementById('dir-results').innerHTML = `
+                    <div class="route-card">
+                        🛣️ <b>${distKm} km</b> &nbsp;|&nbsp; ⏱️ <b>${durMin} min</b>
+                    </div>
+                    <div class="route-card" style="border-left-color: #bc8cff;">
+                        🚀 <b>NOVA Advanced Transit Estimates:</b><br>
+                        • 🎒 <b>Jetpack Flight:</b> ${jetpackTime > 0.1 ? jetpackTime : 0.1} mins (at 120 km/h)<br>
+                        • 🚄 <b>Hyperloop Pod:</b> ${hyperloopTime > 0.1 ? hyperloopTime : 0.1} mins (at 1000 km/h)
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('dir-status').innerHTML = `<div class="error-msg">Routing error: ${e.message}. Ensure ORS API Key is set.</div>`;
+            }
+        }
+
+        function trafficColor(current, freeflow) {
+            const ratio = current / freeflow;
+            if (ratio >= 0.9) return "green";
+            else if (ratio >= 0.6) return "orange";
+            else return "red";
+        }
+
+        async function handleTraffic() {
+            const loc = document.getElementById('traffic-loc').value;
+            const showLayer = document.getElementById('show-layer').checked;
+            const showIncidents = document.getElementById('show-incidents').checked;
+
+            if (!loc) return;
+            document.getElementById('traffic-status').innerHTML = `<div class="caption">Fetching traffic data...</div>`;
+            
+            const result = await geocode(loc);
+            if (!result) {
+                document.getElementById('traffic-status').innerHTML = `<div class="error-msg">Location not found.</div>`;
+                return;
+            }
+
+            updateMap([result.lat, result.lon], 14);
+
+            if (trafficTileLayer) map.removeLayer(trafficTileLayer);
+            if (showLayer && TOMTOM_API_KEY !== "YOUR_TOMTOM_API_KEY") {
+                trafficTileLayer = L.tileLayer(`https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${TOMTOM_API_KEY}`, {
+                    opacity: 0.7, attribution: "© TomTom"
+                }).addTo(map);
+            }
+
+            try {
+                const flowUrl = `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${result.lat},${result.lon}&key=${TOMTOM_API_KEY}`;
+                const flowRes = await fetch(flowUrl);
+                const flowData = await flowRes.json();
+                const d = flowData.flowSegmentData;
+                const color = trafficColor(d.currentSpeed, d.freeFlowSpeed);
+                const emoji = {"green": "🟢", "orange": "🟡", "red": "🔴"}[color];
+                
+                document.getElementById('traffic-results').innerHTML = `
+                    <div class="traffic-card traffic-${color}">
+                        ${emoji} <b>Current speed:</b> ${d.currentSpeed} km/h<br>
+                        🏁 <b>Free-flow speed:</b> ${d.freeFlowSpeed} km/h<br>
+                        📊 <b>Confidence:</b> ${d.confidence}<br>
+                        🚧 <b>Road closure:</b> ${d.roadClosure ? 'Yes ⚠️' : 'No'}
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('traffic-results').innerHTML = `<div class="error-msg">Could not fetch flow data. (Is TomTom API Key set?)</div>`;
+            }
+
+            if (showIncidents && TOMTOM_API_KEY !== "YOUR_TOMTOM_API_KEY") {
+                try {
+                    const r = 0.1;
+                    const bbox = `${result.lon-r},${result.lat-r},${result.lon+r},${result.lat+r}`;
+                    const incUrl = `https://api.tomtom.com/traffic/services/5/incidentDetails?bbox=${bbox}&fields=%7Bincidents%7Btype,geometry%7Btype,coordinates%7D,properties%7BiconCategory,magnitudeOfDelay,events%7Bdescription,code,iconCategory%7D,startTime,endTime,from,to,length,delay,roadNumbers,timeValidity%7D%7D%7D&language=en-GB&t=1111&key=${TOMTOM_API_KEY}`;
+                    const incRes = await fetch(incUrl);
+                    const incData = await incRes.json();
+                    const incidents = incData.incidents || [];
+
+                    incidentsLayer.clearLayers();
+                    incidents.forEach(inc => {
+                        try {
+                            const coords = inc.geometry.coordinates;
+                            const props = inc.properties || {};
+                            const events = props.events || [];
+                            const desc = events[0]?.description || "Incident";
+                            const delay = props.delay || 0;
+
+                            let lat_i, lon_i;
+                            if (inc.geometry.type === "Point") {
+                                lat_i = coords[1]; lon_i = coords[0];
+                            } else {
+                                lat_i = coords[0][1]; lon_i = coords[0][0];
+                            }
+
+                            L.circleMarker([lat_i, lon_i], {
+                                radius: 8, color: "orange", fillColor: "orange", fillOpacity: 1
+                            }).addTo(incidentsLayer).bindPopup(`<b>⚠️ ${desc}</b><br>Delay: ${delay}s`).bindTooltip(desc);
+                        } catch (e) {}
+                    });
+
+                    if (incidents.length > 0) {
+                        document.getElementById('traffic-status').innerHTML = `<div class="warn-msg">⚠️ ${incidents.length} incident(s) near this area.</div>`;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        let clickedLatLon = null;
+        map.on('click', (e) => {
+            clickedLatLon = e.latlng;
+            document.getElementById('click-coords').innerText = `📍 ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+            document.getElementById('click-popup').style.display = 'block';
+        });
+
+        function setOriginFromClick() {
+            document.querySelector('.tab-btn[data-tab="Directions"]').click();
+            document.getElementById('origin-input').value = `${clickedLatLon.lat.toFixed(5)}, ${clickedLatLon.lng.toFixed(5)}`;
+            document.getElementById("click-popup").style.display = 'none';
+        }
+
+        function setDestinationFromClick() {
+            document.querySelector('.tab-btn[data-tab="Directions"]').click();
+            document.getElementById('dest-input').value = `${clickedLatLon.lat.toFixed(5)}, ${clickedLatLon.lng.toFixed(5)}`;
+            document.getElementById('click-popup').style.display = 'none';
+        }
+
+        async function trafficFromClick() {
+            if (TOMTOM_API_KEY === "YOUR_TOMTOM_API_KEY") return alert("TomTom API key not set.");
+            try {
+                const flowUrl = `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${clickedLatLon.lat},${clickedLatLon.lng}&key=${TOMTOM_API_KEY}`;
+                const flowRes = await fetch(flowUrl);
+                const d = (await flowRes.json()).flowSegmentData;
+                const color = trafficColor(d.currentSpeed, d.freeFlowSpeed);
+                const emoji = {"green": "🟢", "orange": "🟡", "red": "🔴"}[color];
+                alert(`${emoji} Speed: ${d.currentSpeed} / ${d.freeFlowSpeed} km/h | Closure: ${d.roadClosure ? 'Yes' : 'No'}`);
+            } catch (e) { 
+                alert("Failed to get traffic around this area."); 
+            }
+            document.getElementById('click-popup').style.display = 'none';
+        }
+
+        function dropPinFromClick() {
+            addMarker(clickedLatLon.lat, clickedLatLon.lng, 'Pin', `📍 ${clickedLatLon.lat.toFixed(5)}, ${clickedLatLon.lng.toFixed(5)}`, '#f85149', 'map-pin');
+            document.getElementById('click-popup').style.display = 'none';
+        }
+    </script>
+
+    <script>
+        (function() {
+            var doc = window.document;
+            if (doc.getElementById('mrbunny-fab')) return;
+
+            var OPENROUTER_KEY = OPENROUTER_API_KEY; 
+
+            var CATALOGUE = [
+                "- Map styles: OpenStreetMap, CartoDB Dark, CartoDB Light, Stadia Terrain, and Satellite (Esri)",
+                "- It can check Traffic around the World",
+                "- It can get Directions from places to places.",
+                "- It can search locations.",
+                "- It can find the user's location.",
+                "- MrBunny AI logo is 🐰, and the Nova Maps logo is 🗺️!"
+            ].join("\n");
+
+            var SYS = "You are MrBunny, an AI assistant made by 15-year-old Koushik Tummepalli for Nova Maps. Help people use Nova Maps, search for places, understand locations, get directions, check traffic, and learn basic history or context about places. Stay focused on navigation, geography, and location help. Be warm, concise, and practical. Sometimes connect things to God of War, Minecraft, and/or MARVEL. Nova Maps features:\n\n" + CATALOGUE + "\n\nYour solo website is https://mrbunnyai-v2.streamlit.app/. Answer directly and clearly in English, unless the user requests a different language. Keep your answers accurate and do not invent anything new. Keep your answers short. Do NOT in any case be non-family-friendly. ALWAYS BE PG_13! Good Luck!";
+
+            var st = doc.createElement('style');
+            st.textContent =
+              '#mrbunny-fab{position:fixed;bottom:24px;right:24px;width:54px;height:54px;background:#0d0d0d;border-radius:50%;border:2px solid #2a2a2a;font-size:1.45rem;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:2147483647;transition:transform .15s;user-select:none;}' +
+              '#mrbunny-fab:hover{transform:scale(1.1);}' +
+              '#mrbunny-panel{position:fixed;bottom:90px;right:24px;width:320px;height:430px;background:#0d0d0d;border:1px solid #222;border-radius:6px;box-shadow:0 10px 44px rgba(0,0,0,.9);z-index:2147483646;display:none;flex-direction:column;overflow:hidden;font-family:"DM Sans","Segoe UI",sans-serif;}' +
+              '#mrbunny-panel.bopen{display:flex;}' +
+              '#bhdr{background:#111;padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1a1a1a;flex-shrink:0;}' +
+              '#bav{width:32px;height:32px;background:#1a1a1a;border-radius:50%;border:1px solid #2e2e2e;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}' +
+              '#bhtx{flex:1;}#btitle{color:#f0f0f0;font-weight:700;font-size:.88rem;}#bsub{color:#444;font-size:.65rem;margin-top:1px;}' +
+              '#bdot{width:7px;height:7px;background:#3ecf8e;border-radius:50%;}' +
+              '#bmsgs{flex:1;overflow-y:auto;padding:12px 10px;display:flex;flex-direction:column;gap:8px;background:#0d0d0d;}' +
+              '#bmsgs::-webkit-scrollbar{width:3px;}#bmsgs::-webkit-scrollbar-thumb{background:#222;border-radius:2px;}' +
+              '.bwb{display:flex;flex-direction:column;align-items:flex-start;}.bwu{display:flex;flex-direction:column;align-items:flex-end;}' +
+              '.blb{font-size:.6rem;color:#333;margin-bottom:2px;}.blu{font-size:.6rem;color:#7a6020;margin-bottom:2px;}' +
+              '.bbot{background:#161616;color:#ccc;border:1px solid #1f1f1f;border-radius:2px 10px 10px 10px;padding:8px 11px;font-size:.8rem;line-height:1.55;max-width:93%;}' +
+              '.busr{background:#C4973B;color:#0d0d0d;border-radius:10px 2px 10px 10px;padding:8px 11px;font-size:.8rem;line-height:1.55;max-width:93%;font-weight:600;}' +
+              '.btyp{color:#333;font-size:.75rem;font-style:italic;padding:2px;}' +
+              '#bbar{display:flex;border-top:1px solid #1a1a1a;background:#111;flex-shrink:0;}' +
+              '#binp{flex:1;background:transparent;border:none;outline:none;color:#ddd;font-size:.82rem;padding:11px 12px;font-family:inherit;}' +
+              '#binp::placeholder{color:#333;}' +
+              '#bbtn{background:#C4973B;border:none;color:#0d0d0d;font-weight:700;font-size:.9rem;padding:0 16px;cursor:pointer;transition:background .15s;}' +
+              '#bbtn:hover{background:#d4a84b;}#bbtn:disabled{background:#222;color:#444;cursor:not-allowed;}';
+            doc.head.appendChild(st);
+
+            var fab = doc.createElement('div');
+            fab.id = 'mrbunny-fab';
+            fab.textContent = '🐰';
+            doc.body.appendChild(fab);
+
+            var panel = doc.createElement('div'); panel.id = 'mrbunny-panel';
+            var hdr = doc.createElement('div'); hdr.id = 'bhdr';
+            hdr.innerHTML = '<div id="bav">🐰</div><div id="bhtx"><div id="btitle">MrBunny AI</div><div id="bsub">Your Maps Navigator</div></div><div id="bdot"></div>';
+            var msgs = doc.createElement('div'); msgs.id = 'bmsgs';
+            var welcome = doc.createElement('div'); welcome.className = 'bwb';
+            welcome.innerHTML = '<div class="blb">MrBunny</div><div class="bbot">Hey! 🐰 I\'m MrBunny, your Nova Maps assistant. Ask me about places, directions, traffic, map styles, or what you can do here.</div>';
+            msgs.appendChild(welcome);
+            var bar = doc.createElement('div'); bar.id = 'bbar';
+            var inp = doc.createElement('input'); inp.id='binp'; inp.type='text'; inp.placeholder='Ask MrBunny anything…';
+            var btn = doc.createElement('button'); btn.id='bbtn'; btn.textContent='➤';
+            bar.appendChild(inp); bar.appendChild(btn);
+            panel.appendChild(hdr); panel.appendChild(msgs); panel.appendChild(bar);
+            doc.body.appendChild(panel);
+
+            fab.addEventListener('click', function() {
+              panel.classList.toggle('bopen');
+              if (panel.classList.contains('bopen')) inp.focus();
+            });
+
+            var hist = [];
+            var MODELS = [
+              'openai/gpt-oss-120b:free',
+              'openai/gpt-oss-20b:free',
+              'google/gemma-3-27b-it:free',
+              'meta-llama/llama-3.3-8b-instruct:free'
+            ];
+            function scrollBot() { msgs.scrollTop = msgs.scrollHeight; }
+
+            function mkBubble(role, text) {
+              var w=doc.createElement('div'); w.className=role==='user'?'bwu':'bwb';
+              var l=doc.createElement('div'); l.className=role==='user'?'blu':'blb'; l.textContent=role==='user'?'You':'MrBunny';
+              var b=doc.createElement('div'); b.className=role==='user'?'busr':'bbot'; b.textContent=text;
+              w.appendChild(l); w.appendChild(b); msgs.appendChild(w); scrollBot();
+            }
+
+            function setTyping(on) {
+              var t=doc.getElementById('btyp');
+              if(on&&!t){var e=doc.createElement('div');e.id='btyp';e.className='btyp';e.textContent='MrBunny is thinking…';msgs.appendChild(e);scrollBot();}
+              else if(!on&&t){t.remove();}
+            }
+
+            function localAnswer(text) {
+              var q = text.toLowerCase();
+              if (q.includes('who made you') || q.includes('who created you') || q.includes('who built you')) {
+                return 'Koushik Tummepalli made me for Nova Maps. I help with places, directions, traffic, map styles, and location questions. 🐰';
+              }
+              return null;
+            }
+
+            async function callOpenRouter(messages) {
+              var lastErr = 'OpenRouter request failed';
+
+              for (var i = 0; i < MODELS.length; i++) {
+                var model = MODELS[i];
+                var res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + OPENROUTER_KEY,
+                    'HTTP-Referer': window.location.href,
+                    'X-Title': 'MrBunny'
+                  },
+                  body: JSON.stringify({
+                    model: model,
+                    messages: messages
+                  })
+                });
+
+                var data = await res.json().catch(function(){ return {}; });
+                if (res.ok && data.choices && data.choices[0] && data.choices[0].message) {
+                  return data.choices[0].message.content;
+                }
+
+                lastErr = (data && data.error && (data.error.message || data.error.code)) || res.statusText || lastErr;
+                console.warn('MrBunny model failed:', model, lastErr);
+              }
+
+              throw new Error(lastErr);
+            }
+
+            async function send() {
+              var text = inp.value.trim(); if(!text) return;
+              inp.value=''; inp.disabled=true; btn.disabled=true;
+              mkBubble('user', text); 
+
+              var localReply = localAnswer(text);
+              if (localReply) {
+                mkBubble('assistant', localReply);
+                hist.push({role: 'user', content: text});
+                hist.push({role: 'assistant', content: localReply});
+                inp.disabled=false; btn.disabled=false; inp.focus();
+                return;
+              }
+              
+              var messages = [{role: 'system', content: SYS}];
+              hist.forEach(h => messages.push({role: h.role, content: h.content}));
+              messages.push({role: 'user', content: text});
+              
+              setTyping(true);
+
+              try {
+                if (!OPENROUTER_KEY || OPENROUTER_KEY === "YOUR_OPENROUTER_API_KEY") {
+                  setTyping(false);
+                  mkBubble('assistant', 'MrBunny needs an OpenRouter API key configured in the script to answer live chat requests.');
+                  return;
+                }
+
+                var reply = await callOpenRouter(messages);
+                setTyping(false);
+                mkBubble('assistant', reply);
+                hist.push({role: 'user', content: text});
+                hist.push({role: 'assistant', content: reply});
+              } catch(e) {
+                setTyping(false);
+                mkBubble('assistant', 'OpenRouter is having trouble right now: ' + (e.message || 'unknown error') + '. Try again in a moment. 🐰');
+                console.error(e);
+              }
+              inp.disabled=false; btn.disabled=false; inp.focus();
+            }
+
+            btn.addEventListener('click', send);
+            inp.addEventListener('keydown', function(e){ if(e.key==='Enter') send(); });
+        })();
+    </script>
+</body>
+</html>
