@@ -80,6 +80,24 @@
             background: #21262d;
             color: #f0f6fc;
         }
+        
+        .unit-toggle-group { display: flex; gap: 4px; margin-bottom: 16px; background: #0d1117; padding: 4px; border-radius: 6px; border: 1px solid #30363d; }
+        .unit-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #8b949e;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            text-align: center;
+            transition: background 0.2s;
+        }
+        .unit-btn.active {
+            background: #1f6feb;
+            color: #ffffff;
+        }
 
         .sidebar-box {
             background: #161b22;
@@ -180,7 +198,8 @@
             <div class="tab-btn active" data-tab="Search">🔍Search</div>
             <div class="tab-btn" data-tab="Directions">🧭Directions</div>
             <div class="tab-btn" data-tab="Traffic">🚦Traffic</div>
-            <div class="tab-btn" data-tab="Settings">⚙️ Settings</div>
+            <div class="tab-btn" data-tab="EV">⚡EV</div>
+            <div class="tab-btn" data-tab="Settings">⚙️</div>
         </div>
 
         <div id="tab-Search" class="tab-content">
@@ -213,7 +232,7 @@
                     <option value="41.8902,12.4922,Colosseum,shield"> 🏟️ Colosseum</option>
                     <option value="43.7230,10.3966,Leaning Tower of Pisa,shield"> 🏛️ Leaning Tower of Pisa</option>
                     <option value="20.6843,-88.5678,Chichen Itza,shield"> 🌽 Chichen Itza</option>
-                    <option value="-22.95192, -43.21046,Christ the Redeemer,flag"> ♱ Christ the Redeemer</option>  -22.95192, -43.21046
+                    <option value="-22.95192,-43.21046,Christ the Redeemer,flag"> ♱ Christ the Redeemer</option>
                 </select>
             </div>
 
@@ -257,9 +276,34 @@
             <div id="traffic-results"></div>
         </div>
 
+        <div id="tab-EV" class="tab-content" style="display: none;">
+            <div class="sidebar-box">
+                <h3 class="subheader">⚡ EV Charging Stations</h3>
+                <input type="text" id="ev-loc" placeholder="Address or place">
+                <label>Search Radius</label>
+                <select id="ev-radius">
+                    <option value="5">5 km</option>
+                    <option value="10" selected>10 km</option>
+                    <option value="25">25 km</option>
+                    <option value="50">50 km</option>
+                </select>
+                <button class="btn" onclick="handleEVSearch()">Find Stations ⚡</button>
+                <div id="ev-status"></div>
+            </div>
+            <div id="ev-results"></div>
+        </div>
+
         <div id="tab-Settings" class="tab-content" style="display: none;">
             <div class="sidebar-box">
-                <h3 class="subheader">⚙️ Map Settings</h3>
+                <h3 class="subheader">📏 Measurement Units</h3>
+                <div class="unit-toggle-group">
+                    <div class="unit-btn active" data-unit="metric" onclick="setUnit('metric')">Metric (km)</div>
+                    <div class="unit-btn" data-unit="imperial" onclick="setUnit('imperial')">Imperial (mi)</div>
+                </div>
+                <div class="caption">Choose how distances and speeds are displayed.</div>
+            </div>
+            <div class="sidebar-box">
+                <h3 class="subheader">⚙️ Map Style</h3>
                 <select id="base-layer-select" onchange="changeBaseLayer(this.value)">
                     <option value="OpenStreetMap">OpenStreetMap</option>
                     <option value="CartoDB Dark">CartoDB Dark</option>
@@ -293,15 +337,19 @@
     </div>
 
     <script>
-        const TOMTOM_API_KEY = "3ESpRk9mAP6zLyMJCRhgDkLzBmJmQzUP";
-        const ORS_API_KEY = "5b3ce3597851110001cf62483814d5291b424b728563a581f68e72e6";
+        const TOMTOM_API_KEY = "YOUR_TOMTOM_API_KEY";
+        const ORS_API_KEY = "YOUR_ORS_API_KEY";
         const STADIA_API_KEY = "";
-        const OPENROUTER_API_KEY = "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";
+        const OPENROUTER_API_KEY = "YOUR_OPENROUTER_API_KEY";
+        const OCM_API_KEY = "YOUR_OCM_API_KEY"; 
+
+        let currentUnit = "metric"; 
 
         document.getElementById('api-status').innerHTML = `
             <b>TomTom:</b> ${TOMTOM_API_KEY !== "YOUR_TOMTOM_API_KEY" ? '✅ Connected' : '❌ Not set'}<br>
             <b>OpenRouteService:</b> ${ORS_API_KEY !== "YOUR_ORS_API_KEY" ? '✅ Connected' : '❌ Not set'}<br>
-            <b>OpenRouter (MrBunny):</b> ${OPENROUTER_API_KEY !== "YOUR_OPENROUTER_API_KEY" ? '✅ Connected' : '❌ Not set'}
+            <b>OpenRouter (MrBunny):</b> ${OPENROUTER_API_KEY !== "YOUR_OPENROUTER_API_KEY" ? '✅ Connected' : '❌ Not set'}<br>
+            <b>OpenChargeMap (EV):</b> ${OCM_API_KEY !== "YOUR_OCM_API_KEY" ? '✅ Connected' : '❌ Not set'}
         `;
 
         const map = L.map('map').setView([16.3067, 80.4365], 12);
@@ -310,6 +358,7 @@
         let markersLayer = L.layerGroup().addTo(map);
         let routeLayer = L.layerGroup().addTo(map);
         let incidentsLayer = L.layerGroup().addTo(map);
+        let evLayer = L.layerGroup().addTo(map);
         let accuracyCircle = null;
 
         const tileOptions = {
@@ -338,6 +387,40 @@
                 document.getElementById(`tab-${btn.dataset.tab}`).style.display = 'block';
             });
         });
+
+        function setUnit(unit) {
+            currentUnit = unit;
+            document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.unit-btn[data-unit="${unit}"]`).classList.add('active');
+            
+            const evRadiusSelect = document.getElementById('ev-radius');
+            if (evRadiusSelect) {
+                evRadiusSelect.innerHTML = '';
+                const radii = [5, 10, 25, 50];
+                const unitLabel = currentUnit === 'imperial' ? 'miles' : 'km';
+                radii.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r;
+                    opt.innerText = `${r} ${unitLabel}`;
+                    if (r === 10) opt.selected = true;
+                    evRadiusSelect.appendChild(opt);
+                });
+            }
+        }
+
+        function formatDistance(km) {
+            if (currentUnit === "imperial") {
+                return `${(km * 0.621371).toFixed(2)} miles`;
+            }
+            return `${km.toFixed(2)} km`;
+        }
+
+        function formatSpeed(kmh) {
+            if (currentUnit === "imperial") {
+                return `${Math.round(kmh * 0.621371)} mph`;
+            }
+            return `${Math.round(kmh)} km/h`;
+        }
 
         async function geocode(address) {
             try {
@@ -370,6 +453,7 @@
             markersLayer.clearLayers();
             routeLayer.clearLayers();
             incidentsLayer.clearLayers();
+            evLayer.clearLayers();
             if (accuracyCircle) map.removeLayer(accuracyCircle);
         }
 
@@ -473,7 +557,7 @@
                 const feature = data.features[0];
                 const coords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
                 const summary = feature.properties.summary;
-                const distKm = (summary.distance / 1000).toFixed(2);
+                const distKm = summary.distance / 1000;
                 const durMin = (summary.duration / 60).toFixed(1);
 
                 clearMap();
@@ -488,11 +572,12 @@
 
                 const jetpackTime = (distKm / 120 * 60).toFixed(1);
                 const hyperloopTime = (distKm / 1000 * 60).toFixed(1);
+                const distStr = formatDistance(distKm);
 
                 document.getElementById('dir-status').innerHTML = '';
                 document.getElementById('dir-results').innerHTML = `
                     <div class="route-card">
-                        🛣️ <b>${distKm} km</b> &nbsp;|&nbsp; ⏱️ <b>${durMin} min</b>
+                        🛣️ <b>${distStr}</b> &nbsp;|&nbsp; ⏱️ <b>${durMin} min</b>
                     </div>
                     <div class="route-card" style="border-left-color: #bc8cff;">
                         🚀 <b>NOVA Advanced Transit Estimates:</b><br>
@@ -545,8 +630,8 @@
                 
                 document.getElementById('traffic-results').innerHTML = `
                     <div class="traffic-card traffic-${color}">
-                        ${emoji} <b>Current speed:</b> ${d.currentSpeed} km/h<br>
-                        🏁 <b>Free-flow speed:</b> ${d.freeFlowSpeed} km/h<br>
+                        ${emoji} <b>Current speed:</b> ${formatSpeed(d.currentSpeed)}<br>
+                        🏁 <b>Free-flow speed:</b> ${formatSpeed(d.freeFlowSpeed)}<br>
                         📊 <b>Confidence:</b> ${d.confidence}<br>
                         🚧 <b>Road closure:</b> ${d.roadClosure ? 'Yes ⚠️' : 'No'}
                     </div>
@@ -593,6 +678,62 @@
             }
         }
 
+        async function handleEVSearch() {
+            const loc = document.getElementById('ev-loc').value;
+            const radiusVal = document.getElementById('ev-radius').value;
+            const radiusUnit = currentUnit === 'imperial' ? 'miles' : 'km';
+            
+            if (!loc) return;
+            document.getElementById('ev-status').innerHTML = `<div class="caption">Finding EV stations...</div>`;
+            document.getElementById('ev-results').innerHTML = '';
+            
+            if (OCM_API_KEY === "YOUR_OCM_API_KEY") {
+                document.getElementById('ev-status').innerHTML = `<div class="error-msg">OpenChargeMap API Key not set.</div>`;
+                return;
+            }
+
+            const result = await geocode(loc);
+            if (!result) {
+                document.getElementById('ev-status').innerHTML = `<div class="error-msg">Location not found.</div>`;
+                return;
+            }
+
+            clearMap();
+            updateMap([result.lat, result.lon], 12);
+            addMarker(result.lat, result.lon, "Search Center", `<b>🔍 Search Area</b><br>${result.name.substring(0, 60)}`, '#58a6ff', 'map-marker');
+
+            try {
+                const url = `https://api.openchargemap.io/v3/poi/?output=json&maxresults=50&compact=true&verbose=false&latitude=${result.lat}&longitude=${result.lon}&distance=${radiusVal}&distanceunit=${radiusUnit.toUpperCase()}&key=${OCM_API_KEY}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (data && data.length > 0) {
+                    data.forEach(poi => {
+                        const addr = poi.AddressInfo;
+                        const conn = poi.Connections || [];
+                        let connTypes = conn.map(c => c.ConnectionType ? c.ConnectionType.Title : "Unknown").join(", ");
+                        if (!connTypes) connTypes = "Unknown";
+                        
+                        const popup = `<b>⚡ ${addr.Title}</b><br>📍 ${addr.AddressLine1 || 'N/A'}<br>🔌 Type: ${connTypes}<br>🔢 Connections: ${conn.length}`;
+                        
+                        L.marker([addr.Latitude, addr.Longitude], {
+                            icon: L.divIcon({
+                                html: `<i class="fas fa-charging-station" style="color: #3fb950; font-size: 24px; text-shadow: 0 0 4px rgba(0,0,0,0.8);"></i>`,
+                                className: 'custom-fa-icon',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 24]
+                            })
+                        }).addTo(evLayer).bindPopup(popup).bindTooltip(addr.Title);
+                    });
+                    document.getElementById('ev-status').innerHTML = `<div class="success-msg">Found ${data.length} EV stations within ${radiusVal} ${radiusUnit}.</div>`;
+                } else {
+                    document.getElementById('ev-status').innerHTML = `<div class="warn-msg">No EV stations found in this area.</div>`;
+                }
+            } catch (e) {
+                document.getElementById('ev-status').innerHTML = `<div class="error-msg">Error fetching EV data: ${e.message}</div>`;
+            }
+        }
+
         let clickedLatLon = null;
         map.on('click', (e) => {
             clickedLatLon = e.latlng;
@@ -620,7 +761,7 @@
                 const d = (await flowRes.json()).flowSegmentData;
                 const color = trafficColor(d.currentSpeed, d.freeFlowSpeed);
                 const emoji = {"green": "🟢", "orange": "🟡", "red": "🔴"}[color];
-                alert(`${emoji} Speed: ${d.currentSpeed} / ${d.freeFlowSpeed} km/h | Closure: ${d.roadClosure ? 'Yes' : 'No'}`);
+                alert(`${emoji} Speed: ${formatSpeed(d.currentSpeed)} / ${formatSpeed(d.freeFlowSpeed)} | Closure: ${d.roadClosure ? 'Yes' : 'No'}`);
             } catch (e) { 
                 alert("Failed to get traffic around this area."); 
             }
@@ -646,10 +787,11 @@
                 "- It can get Directions from places to places.",
                 "- It can search locations.",
                 "- It can find the user's location.",
+                "- It can find EV Charging Stations nearby.",
                 "- MrBunny AI logo is 🐰, and the Nova Maps logo is 🗺️!"
             ].join("\n");
 
-            var SYS = "You are MrBunny, an AI assistant made by 15-year-old Koushik Tummepalli for Nova Maps. Help people use Nova Maps, search for places, understand locations, get directions, check traffic, and learn basic history or context about places. Stay focused on navigation, geography, and location help. Be warm, concise, and practical. Sometimes connect things to God of War, Minecraft, and/or MARVEL. Nova Maps features:\n\n" + CATALOGUE + "\n\nYour solo website is https://mrbunnyai-v2.streamlit.app/. Answer directly and clearly in English, unless the user requests a different language. Keep your answers accurate and do not invent anything new. Keep your answers short. Do NOT in any case be non-family-friendly. ALWAYS BE PG_13! Good Luck!";
+            var SYS = "You are MrBunny, an AI assistant made by 15-year-old Koushik Tummepalli for Nova Maps. Help people use Nova Maps, search for places, understand locations, get directions, check traffic, find EV stations, and learn basic history or context about places. Stay focused on navigation, geography, and location help. Be warm, concise, and practical. Sometimes connect things to God of War, Minecraft, and/or MARVEL. Nova Maps features:\n\n" + CATALOGUE + "\n\nYour solo website is https://mrbunnyai-v2.streamlit.app/. Answer directly and clearly in English, unless the user requests a different language. Keep your answers accurate and do not invent anything new. Keep your answers short. Do NOT in any case be non-family-friendly. ALWAYS BE PG_13! Good Luck!";
 
             var st = doc.createElement('style');
             st.textContent =
@@ -685,7 +827,7 @@
             hdr.innerHTML = '<div id="bav">🐰</div><div id="bhtx"><div id="btitle">MrBunny AI</div><div id="bsub">Your Maps Navigator</div></div><div id="bdot"></div>';
             var msgs = doc.createElement('div'); msgs.id = 'bmsgs';
             var welcome = doc.createElement('div'); welcome.className = 'bwb';
-            welcome.innerHTML = '<div class="blb">MrBunny</div><div class="bbot">Hey! 🐰 I\'m MrBunny, your Nova Maps assistant. Ask me about places, directions, traffic, map styles, or what you can do here.</div>';
+            welcome.innerHTML = '<div class="blb">MrBunny</div><div class="bbot">Hey! 🐰 I\'m MrBunny, your Nova Maps assistant. Ask me about places, directions, traffic, EV stations, map styles, or what you can do here.</div>';
             msgs.appendChild(welcome);
             var bar = doc.createElement('div'); bar.id = 'bbar';
             var inp = doc.createElement('input'); inp.id='binp'; inp.type='text'; inp.placeholder='Ask MrBunny anything…';
@@ -724,7 +866,7 @@
             function localAnswer(text) {
               var q = text.toLowerCase();
               if (q.includes('who made you') || q.includes('who created you') || q.includes('who built you')) {
-                return 'Koushik Tummepalli made me for Nova Maps. I help with places, directions, traffic, map styles, and location questions. 🐰';
+                return 'Koushik Tummepalli made me for Nova Maps. I help with places, directions, traffic, EV stations, map styles, and location questions. 🐰';
               }
               return null;
             }
